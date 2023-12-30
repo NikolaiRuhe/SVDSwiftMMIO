@@ -398,7 +398,7 @@ public struct Register {
         /// In addition, a description string can be associated with each entry
         /// in the map.
         public struct EnumeratedValue {
-            public var name: String
+            public var name: Identifier
             public var description: String?
             public var value: String?
             public var isDefault: Bool?
@@ -406,6 +406,7 @@ public struct Register {
     }
 }
 
+/// A string that is a valid C identifier.
 public struct Identifier: RawRepresentable, CustomStringConvertible {
     public init() { self.rawValue = "_" }
     public init?(rawValue: String) { self.rawValue = rawValue }
