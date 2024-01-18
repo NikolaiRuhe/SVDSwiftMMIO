@@ -2,8 +2,9 @@ import Foundation
 import ArgumentParser
 import SVD
 
+/// A command line tool that reads SVD files and emits swift source code.
 @main
-struct SVDSwiftMMIO: ParsableCommand {
+struct SVDSwiftMMIO: ParsableCommand, SourceCodeConfiguration {
     @Argument(help: "The SVD input file to parse.")
     var svdInputFile: String
 
@@ -12,23 +13,24 @@ struct SVDSwiftMMIO: ParsableCommand {
 
     var outputDirectoryURL: URL { URL(filePath: outputDirectory, directoryHint: .isDirectory) }
 
-    mutating func run() throws {
+    func run() throws {
         let url = URL(filePath: svdInputFile, directoryHint: .notDirectory)
         let device = try Device(contentsOf: url)
         try createOutputDirectory()
 
-        try device.createSourceFile(in: outputDirectoryURL)
-
-        for peripheral in device.peripherals {
-            try peripheral.createSourceFile(in: outputDirectoryURL)
+        let descriptors: [any SVDSwiftMMIOSourceGeneration] = device.peripherals + [device]
+        for descriptor in descriptors {
+            var source = GeneratedSourceCode(filename: descriptor.name.rawValue + ".swift", configuration: self)
+            descriptor.appendSourceCode(to: &source)
+            try source.writeToFile()
         }
     }
 
     func createOutputDirectory() throws {
-        let outputDirectoryURL = URL(filePath: outputDirectory, directoryHint: .isDirectory)
+        let outputDirectoryURL = URL(filePath: outputDirectoryURL.path, directoryHint: .isDirectory)
 
         var isDirectory: ObjCBool = false
-        guard !FileManager.default.fileExists(atPath: outputDirectoryURL.path, isDirectory: &isDirectory) else {
+        guard !FileManager.default.fileExists(atPath: outputDirectory, isDirectory: &isDirectory) else {
             if isDirectory.boolValue { return }
             Self.exit(withError: SVDSwiftMMIOError(message: "not a directory: \(outputDirectory)"))
         }
@@ -38,5 +40,3 @@ struct SVDSwiftMMIO: ParsableCommand {
 }
 
 struct SVDSwiftMMIOError: Error { var message: String }
-
-

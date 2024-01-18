@@ -3,97 +3,127 @@ import SVD
 
 protocol SVDSwiftMMIOSourceGeneration {
     var name: SVD.Identifier { get }
-    var sourceCode: String { get }
-
-    var sourceFilename: String { get }
-    func createSourceFile(in directoryURL: URL) throws
-}
-
-extension SVDSwiftMMIOSourceGeneration {
-    var sourceFilename: String {
-        name.rawValue + ".swift"
-    }
-
-    func createSourceFile(in directoryURL: URL) throws {
-        let data = sourceCode.data(using: .utf8)!
-        let sourceURL = directoryURL.appending(path: sourceFilename)
-        try data.write(to: sourceURL)
-    }
+    func appendSourceCode(to source: inout GeneratedSourceCode)
 }
 
 extension Device: SVDSwiftMMIOSourceGeneration {
-
-    public var sourceCode: String {
-        """
+    func appendSourceCode(to source: inout GeneratedSourceCode) {
+        source += """
         // RP2040 System View Description
 
         import MMIO
         import MMIOExtensions
-
-        \(description.docComment(indentation: 0))
-        public enum \(name.rawValue) {}
         """
+
+        if !description.isEmpty {
+            source += description.docComment
+        }
+
+        source += "public enum \(name.rawValue) {}"
     }
 }
 
 extension Peripheral: SVDSwiftMMIOSourceGeneration {
-    public var sourceCode: String {
-        """
+    func appendSourceCode(to source: inout GeneratedSourceCode) {
+        source += """
         import MMIO
         import MMIOExtensions
 
-        \(description?.docComment(indentation: 0) ?? "")@RegisterBank
-        public struct \(name) {
+        """
+
+        if let description {
+            source += description.docComment
+        }
+
+        source += "@RegisterBank"
+
+        source.beginScope {
+            "public struct \(name) {"
+        } body: { source in
+            source += """
 
             public static var `default`: Self { .init(unsafeAddress: \(baseAddress)) }
 
-        \(registers.map {
-            $0.swiftRegisterBankDescription
-            + "\n\n"
-            + $0.swiftDescription
-        }.joined(separator: "\n\n"))
+            """
+
+            var isFirst = true
+            for register in registers {
+                if isFirst {
+                    isFirst = false
+                } else {
+                    source += ""
+                }
+                register.appendSourceCode(to: &source)
+            }
         }
-        """
     }
 }
 
 extension Register {
-    public var swiftRegisterBankDescription: String {
-        """
-        \(description?.docComment(indentation: 1) ?? "")    @RegisterBank(offset: \(addressOffset))
-            public var \(name.rawValue.lowercased()): Register<\(name)>
-        """
-    }
+    func appendSourceCode(to source: inout GeneratedSourceCode) {
+        if let description {
+            source += description.docComment
+        }
 
-    public var swiftDescription: String {
-        """
-            @Register(bitWidth: \(size.value))
-            public struct \(name) {\(fields.isEmpty ? "" : "\n\(fields.map { $0.swiftDescription }.joined(separator: "\n\n"))\n")    }
-        """
+        source += "@RegisterBank(offset: \(addressOffset))"
+        source += "public var \(name): Register<\(name)_Descriptor>"
+        source += "\n"
+        source += "@Register(bitWidth: \(size.value))"
+
+        if fields.isEmpty {
+            source += "public struct \(name)_Descriptor {}"
+        } else {
+            source.beginScope {
+                "public struct \(name)_Descriptor {"
+            } body: { source in
+                var isFirst = true
+                for field in fields {
+                    if isFirst {
+                        isFirst = false
+                    } else {
+                        source += ""
+                    }
+                    field.appendSourceCode(to: &source)
+                }
+            }
+        }
     }
 }
 
 extension Register.Field {
-    public var swiftDescription: String {
-        if enumeratedValues.isEmpty {
-            return """
-            \(description?.docComment(indentation: 2) ?? "")        @\(access?.swiftDescription ?? "ReadWrite")(bits: \(bitRange.swiftDescription)\(bitRange.count == 1 ? ", as: Bool.self" : ", as: BitField\(bitRange.count).self"))
-                    public var \(name.rawValue.lowercased()): \(name.rawValue)_Field
-            """
+    func appendSourceCode(to source: inout GeneratedSourceCode) {
+        if let description {
+            source += description.docComment
         }
 
-        return """
-        \(description?.docComment(indentation: 2) ?? "")        @\(access?.swiftDescription ?? "ReadWrite")(bits: \(bitRange.swiftDescription), as: \(name.rawValue)_Values.self)
-                public var \(name.rawValue.lowercased()): \(name.rawValue)_Field
-
-                public enum \(name.rawValue)_Values: UInt, BitFieldProjectable {
-        \(enumeratedValues
-            .map { "\($0.description?.docComment(indentation: 3) ?? "")            case \(name.rawValue)_\($0.name)\($0.value.map { " = \($0)"} ?? "")" }
-            .joined(separator: "\n"))
-
-                    public static var bitWidth: Int { \(bitRange.count) }
-                }
+        source += """
+        \(access.mmioMacro)(bits: \(bitRange.swiftDescription), as: \(fieldType).self)
+        public var \(name): \(name)_Field
         """
+
+        if enumeratedValues.isEmpty { return }
+
+        source.beginScope { """
+
+            public enum \(fieldType): UInt, BitFieldProjectable {
+            """
+        } body: { source in
+            for enumValue in enumeratedValues {
+                if let description = enumValue.description {
+                    source += description.docComment
+                }
+                let value = enumValue.value.map { " = \($0)" } ?? ""
+                source += "case \(name.rawValue)_\(enumValue.name)\(value)"
+            }
+            source += """
+
+            public static var bitWidth: Int { \(bitRange.count) }
+            """
+        }
+    }
+
+    var fieldType: String {
+        enumeratedValues.isEmpty ? bitRange.count == 1 ? "Bool" : "BitField\(bitRange.count)" : "\(name.rawValue)_Values"
     }
 }
 
@@ -104,23 +134,27 @@ extension BitRange {
     }
 }
 
-extension Access {
-    var swiftDescription: String {
+extension Optional<Access> {
+    var mmioMacro: String {
         switch self {
-        case .readOnly: return "ReadOnly"
-        case .writeOnly: return "WriteOnly"
-        case .readWrite: return "ReadWrite"
-        default: return "ReadWrite"
+        case .readOnly:  "@ReadOnly"
+        case .writeOnly: "@WriteOnly"
+        case .readWrite: "@ReadWrite"
+        default:         "@ReadWrite"
         }
     }
 }
 
 extension String {
-    func docComment(indentation: Int = 0) -> String {
+    var docComment: String {
         self
             .split(separator: "\n")
             .flatMap { $0.split(separator: "\\n") }
-            .map { String(repeating: "    ", count: indentation) + "/// " + $0.trimmingCharacters(in: .whitespaces) + "\n" }
-            .joined()
+            .map { "/// " + $0.trimmingCharacters(in: .whitespaces) }
+            .joined(separator: "\n")
     }
+}
+
+extension Identifier {
+    var swiftName: String { rawValue.lowercased() }
 }
