@@ -398,7 +398,7 @@ public struct Register {
         /// In addition, a description string can be associated with each entry
         /// in the map.
         public struct EnumeratedValue {
-            public var name: Identifier
+            public var name: String
             public var description: String?
             public var value: String?
             public var isDefault: Bool?
@@ -409,9 +409,13 @@ public struct Register {
 /// A string that is a valid C identifier.
 public struct Identifier: RawRepresentable, CustomStringConvertible {
     public init() { self.rawValue = "_" }
-    public init?(rawValue: String) { self.rawValue = rawValue }
+    public init?(rawValue: String) {
+        guard try! Self.regex.wholeMatch(in: rawValue) != nil else { return nil }
+        self.rawValue = rawValue
+    }
     public var rawValue: String
     public var description: String { rawValue }
+    private static let regex = #/[A-Za-z_][A-Za-z_0-9]*/#
 }
 
 public struct ScaledNonNegativeInteger: CustomStringConvertible {
