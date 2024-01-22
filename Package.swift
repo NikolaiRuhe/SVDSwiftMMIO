@@ -11,6 +11,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+        .package(url: "https://github.com/apple/swift-syntax.git", from: "509.0.2"),
     ],
     targets: [
         .target(
@@ -19,9 +20,21 @@ let package = Package(
             name: "SVDSwiftMMIO",
             dependencies: [
                 "SVD",
+                "MMIOMacros",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
             ]
         ),
+        .target(name: "MMIOMacros", dependencies: [
+            "MMIOUtilities",
+            .product(name: "SwiftSyntax", package: "swift-syntax"),
+            .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+            .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+            .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
+        ]),
+        .target(name: "MMIOUtilities"),
         .testTarget(
             name: "SVDTests",
             dependencies: ["SVD", "SVDSwiftMMIO"]),

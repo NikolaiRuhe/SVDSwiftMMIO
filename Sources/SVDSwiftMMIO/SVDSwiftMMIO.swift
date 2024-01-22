@@ -11,6 +11,9 @@ struct SVDSwiftMMIO: ParsableCommand, SourceCodeConfiguration {
     @Argument(help: "The output directory (will be created on demand).")
     var outputDirectory: String
 
+    @Flag(name: .shortAndLong, help: "Expand MMIO macros in generated source code")
+    var expandMacros: Bool = false
+
     var outputDirectoryURL: URL { URL(filePath: outputDirectory, directoryHint: .isDirectory) }
 
     func run() throws {

@@ -35,7 +35,7 @@ extension Peripheral: SVDSwiftMMIOSourceGeneration {
             source += description.docComment
         }
 
-        source += "@RegisterBank"
+        source += "\(source.configuration.expandMacros ? "@RegisterBankMacro" : "@RegisterBank")"
 
         source.beginScope {
             "public struct \(name) {"

@@ -28,7 +28,10 @@ struct GeneratedSourceCode {
     func writeToFile() throws {
         let sourceURL = configuration.outputDirectoryURL.appending(path: filename)
 
-        let sourceCode = lines.joined()
+        var sourceCode = lines.joined()
+        if configuration.expandMacros {
+            sourceCode.expandMacros()
+        }
         let data = Data(sourceCode.utf8)
 
         print("writing \(sourceURL.lastPathComponent)")
@@ -37,5 +40,6 @@ struct GeneratedSourceCode {
 }
 
 protocol SourceCodeConfiguration {
+    var expandMacros: Bool { get }
     var outputDirectoryURL: URL { get }
 }
